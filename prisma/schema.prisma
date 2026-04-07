@@ -1,0 +1,208 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEAD — entrada bruta de qualquer fonte
+// ─────────────────────────────────────────────────────────────────────────────
+model Lead {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String?   @db.VarChar(255)
+  phone            String?   @db.VarChar(20)
+  address          String?   @db.Text
+  city             String?   @db.VarChar(100)
+  state            String?   @db.Char(2)
+  source           String    @db.VarChar(50)
+  document         String?   @db.VarChar(20)
+  size             String?   @db.VarChar(20)
+  type             String?   @db.VarChar(30)
+  rawData          Json?     @map("raw_data")
+  enrichmentStatus String    @default("pending") @map("enrichment_status") @db.VarChar(20)
+  pipelineStage    String    @default("raw") @map("pipeline_stage") @db.VarChar(30)
+  processed        Boolean   @default(false)
+  deletedAt        DateTime? @map("deleted_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  contact Contact?
+
+  @@index([pipelineStage], name: "idx_leads_pipeline_stage")
+  @@index([processed], name: "idx_leads_processed")
+  @@map("leads")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTACT — registro operacional e comercial do contato
+// ─────────────────────────────────────────────────────────────────────────────
+model Contact {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  leadId           String    @unique @map("lead_id") @db.Uuid
+  phone            String?   @unique @db.VarChar(20)
+  email            String[]  @default([])
+  whatsapp         Boolean?
+  preferredChannel String?   @map("preferred_channel") @db.VarChar(20)
+  contactType      String?   @map("contact_type") @db.VarChar(20)
+  priority         String?   @db.VarChar(10)
+  stage            String    @default("new") @db.VarChar(30)
+  score            Int       @default(0)
+  priceSensitive   Boolean   @default(false) @map("price_sensitive")
+  lastContactAt    DateTime? @map("last_contact_at")
+  lastReplyAt      DateTime? @map("last_reply_at")
+  contactCount30d  Int       @default(0) @map("contact_count_30d")
+  lastPurchaseAt   DateTime? @map("last_purchase_at")
+  status           String    @default("active") @db.VarChar(20)
+  unsubscribed     Boolean   @default(false)
+  unsubscribedAt   DateTime? @map("unsubscribed_at")
+  deletedAt        DateTime? @map("deleted_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  lead         Lead          @relation(fields: [leadId], references: [id])
+  messages     Message[]
+  interactions Interaction[]
+  orders       Order[]
+
+  @@index([status, unsubscribed], name: "idx_contacts_status")
+  @@index([lastPurchaseAt], name: "idx_contacts_last_purchase")
+  @@index([lastPurchaseAt, status, unsubscribed], name: "idx_contacts_reactivation")
+  @@map("contacts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEMPLATE MESSAGE — templates de WhatsApp e e-mail
+// ─────────────────────────────────────────────────────────────────────────────
+model TemplateMessage {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  body      String   @db.Text
+  channel   String   @db.VarChar(20)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  campaigns Campaign[]
+  messages  Message[]
+
+  @@map("template_message")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMPAIGN — agrupamento de envios para um segmento
+// ─────────────────────────────────────────────────────────────────────────────
+model Campaign {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String    @db.VarChar(100)
+  templateId Int       @map("template_id")
+  segment    String    @db.VarChar(50)
+  status     String    @default("queued") @db.VarChar(20)
+  startAt    DateTime? @map("start_at")
+  finishedAt DateTime? @map("finished_at")
+  totalSent  Int       @default(0) @map("total_sent")
+  deletedAt  DateTime? @map("deleted_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  template TemplateMessage @relation(fields: [templateId], references: [id])
+  messages Message[]
+
+  @@map("campaigns")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MESSAGE — fila de envio individual
+// ─────────────────────────────────────────────────────────────────────────────
+model Message {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contactId   String    @map("contact_id") @db.Uuid
+  campaignId  String?   @map("campaign_id") @db.Uuid
+  templateId  Int?      @map("template_id")
+  channel     String    @db.VarChar(20)
+  status      String    @default("pending") @db.VarChar(20)
+  retryCount  Int       @default(0) @map("retry_count") @db.SmallInt
+  retryAfter  DateTime? @map("retry_after")
+  lockedAt    DateTime? @map("locked_at")
+  sentAt      DateTime? @map("sent_at")
+  errorReason String?   @map("error_reason") @db.Text
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  contact      Contact          @relation(fields: [contactId], references: [id])
+  campaign     Campaign?        @relation(fields: [campaignId], references: [id])
+  template     TemplateMessage? @relation(fields: [templateId], references: [id])
+  interactions Interaction[]
+
+  // Índice parcial: hot path do worker — somente pending
+  @@index([status, retryAfter], name: "idx_messages_status_retry")
+  // Índice para health check de dead letter (processing travado)
+  @@index([lockedAt], name: "idx_messages_locked_at")
+  @@map("messages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERACTION — log completo de todos os eventos do CRM
+// ─────────────────────────────────────────────────────────────────────────────
+model Interaction {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contactId      String    @map("contact_id") @db.Uuid
+  messageId      String?   @map("message_id") @db.Uuid
+  orderId        String?   @map("order_id") @db.Uuid
+  metaMessageId  String?   @unique @map("meta_message_id") @db.VarChar(100)
+  type           String    @db.VarChar(30)
+  classification String?   @db.VarChar(30)
+  content        String?   @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  contact Contact  @relation(fields: [contactId], references: [id])
+  message Message? @relation(fields: [messageId], references: [id])
+  order   Order?   @relation(fields: [orderId], references: [id])
+
+  @@index([contactId], name: "idx_interactions_contact_id")
+  @@map("interactions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDER — pedidos (NF via ERP ou manuais via Forms)
+// ─────────────────────────────────────────────────────────────────────────────
+model Order {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contactId String    @map("contact_id") @db.Uuid
+  date      DateTime  @db.Date
+  payment   String?   @db.VarChar(20)
+  subtotal  Decimal   @db.Decimal(10, 2)
+  discount  Decimal   @default(0) @db.Decimal(10, 2)
+  total     Decimal   @db.Decimal(10, 2)
+  source    String    @db.VarChar(20)
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  contact      Contact       @relation(fields: [contactId], references: [id])
+  items        OrderItem[]
+  interactions Interaction[]
+
+  @@map("orders")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDER ITEM — itens de cada pedido (product_id e product_name vêm do ERP)
+// ─────────────────────────────────────────────────────────────────────────────
+model OrderItem {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId     String  @map("order_id") @db.Uuid
+  productId   String? @map("product_id") @db.VarChar(50)
+  productName String  @map("product_name") @db.VarChar(255)
+  quantity    Int
+  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  total       Decimal @db.Decimal(10, 2)
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("order_items")
+}
