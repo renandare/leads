@@ -1,3 +1,6 @@
+// src/infrastructure/http/middlewares/auth.middleware.ts
+// Authentication middleware to protect routes using a simple API key mechanism.
+
 import { NextFunction, Request, Response } from 'express';
 
 import { AppError } from '@shared/errors/AppError';

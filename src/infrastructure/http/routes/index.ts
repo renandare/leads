@@ -1,6 +1,9 @@
+// src/infrastructure/http/routes/index.ts
+
 import { Router, Request, Response } from 'express';
 
 import { prisma } from '@infrastructure/database/prisma/client';
+import captureRoutes from './capture.routes';
 
 const router = Router();
 
@@ -13,5 +16,7 @@ router.get('/health', async (_req: Request, res: Response) => {
     environment: process.env.NODE_ENV,
   });
 });
+
+router.use('/capture', captureRoutes);
 
 export default router;
