@@ -26,3 +26,12 @@ export interface CreateLeadData {
   rawData: unknown;
   pipelineStage?: string;
 }
+
+export interface UpdateLeadNormalizedData {
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pipelineStage: string;
+}

@@ -4,7 +4,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 
 import { ILeadRepository } from '@domain/lead/repositories/ILeadRepository';
-import { CreateLeadData } from '@domain/lead/entities/Lead';
+import { CreateLeadData, Lead, UpdateLeadNormalizedData } from '@domain/lead/entities/Lead';
 import { PipelineStage } from '@domain/lead/enums/PipelineStage';
 
 export class PrismaLeadRepository implements ILeadRepository {
@@ -37,5 +37,60 @@ export class PrismaLeadRepository implements ILeadRepository {
     });
 
     return result.count;
+  }
+
+  // Find a batch of raw leads that are not yet processed
+  async findRawBatch(batchSize: number): Promise<Lead[]> {
+    const rows = await this.prisma.lead.findMany({
+      where: { pipelineStage: PipelineStage.RAW, processed: false, deletedAt: null },
+      take: batchSize,
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return rows as Lead[];
+  }
+
+  // Count how many raw leads are pending processing
+  async countRaw(): Promise<number> {
+    return this.prisma.lead.count({
+      where: { pipelineStage: PipelineStage.RAW, processed: false, deletedAt: null },
+    });
+  }
+
+  // Update a lead with normalized data and mark it as processed
+  async updateNormalized(id: string, data: UpdateLeadNormalizedData): Promise<void> {
+    await this.prisma.lead.update({
+      where: { id },
+      data: {
+        name: data.name,
+        phone: data.phone,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        pipelineStage: data.pipelineStage,
+        processed: true,
+      },
+    });
+  }
+
+  // Mark a lead as processed without updating normalized fields (used when normalization fails)
+  async markProcessed(id: string): Promise<void> {
+    await this.prisma.lead.update({
+      where: { id },
+      data: { processed: true },
+    });
+  }
+
+  // Get statistics for leads grouped by pipeline stage
+  async getStats(): Promise<Record<string, number>> {
+    const defaults = Object.fromEntries(Object.values(PipelineStage).map(s => [s, 0]));
+
+    const rows = await this.prisma.lead.groupBy({
+      by: ['pipelineStage'],
+      where: { deletedAt: null },
+      _count: { id: true },
+    });
+
+    return { ...defaults, ...Object.fromEntries(rows.map(r => [r.pipelineStage, r._count.id])) };
   }
 }
