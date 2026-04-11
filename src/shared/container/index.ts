@@ -4,6 +4,7 @@ import { PrismaContactRepository } from '@infrastructure/repositories/PrismaCont
 import { GoogleMapsService } from '@infrastructure/services/google/GoogleMapsService';
 import { CaptureGoogleMapsUseCase } from '@application/capture/use-cases/CaptureGoogleMapsUseCase';
 import { NormalizeLeadsUseCase } from '@application/lead/use-cases/NormalizeLeadsUseCase';
+import { DeduplicateLeadsUseCase } from '@application/lead/use-cases/DeduplicateLeadsUseCase';
 import { CaptureController } from '@infrastructure/http/controllers/CaptureController';
 import { LeadController } from '@infrastructure/http/controllers/LeadController';
 
@@ -17,10 +18,11 @@ const googleMapsService = new GoogleMapsService();
 // Use cases
 const captureGoogleMapsUseCase = new CaptureGoogleMapsUseCase(googleMapsService, leadRepository);
 const normalizeLeadsUseCase = new NormalizeLeadsUseCase(leadRepository, contactRepository);
+const deduplicateLeadsUseCase = new DeduplicateLeadsUseCase(leadRepository);
 
 // Controllers
 const captureController = new CaptureController(captureGoogleMapsUseCase);
-const leadController = new LeadController(normalizeLeadsUseCase, leadRepository);
+const leadController = new LeadController(normalizeLeadsUseCase, deduplicateLeadsUseCase, leadRepository);
 
 export const container = {
   captureController,

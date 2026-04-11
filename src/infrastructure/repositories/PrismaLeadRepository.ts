@@ -3,7 +3,7 @@
 
 import { PrismaClient, Prisma } from '@prisma/client';
 
-import { ILeadRepository } from '@domain/lead/repositories/ILeadRepository';
+import { ExistsDuplicateParams, ILeadRepository } from '@domain/lead/repositories/ILeadRepository';
 import { CreateLeadData, Lead, UpdateLeadNormalizedData } from '@domain/lead/entities/Lead';
 import { PipelineStage } from '@domain/lead/enums/PipelineStage';
 
@@ -70,7 +70,7 @@ export class PrismaLeadRepository implements ILeadRepository {
         state: data.state,
         website: data.website,
         pipelineStage: data.pipelineStage,
-        processed: true,
+        processed: false,
       },
     });
   }
@@ -94,5 +94,70 @@ export class PrismaLeadRepository implements ILeadRepository {
     });
 
     return { ...defaults, ...Object.fromEntries(rows.map(r => [r.pipelineStage, r._count.id])) };
+  }
+
+  // Find a batch of normalized leads not yet processed (for deduplication)
+  async findNormalizedBatch(batchSize: number): Promise<Lead[]> {
+    const rows = await this.prisma.lead.findMany({
+      where: { pipelineStage: PipelineStage.NORMALIZED, processed: false, deletedAt: null },
+      take: batchSize,
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return rows as Lead[];
+  }
+
+  // Count how many normalized leads are pending deduplication
+  async countNormalized(): Promise<number> {
+    return this.prisma.lead.count({
+      where: { pipelineStage: PipelineStage.NORMALIZED, processed: false, deletedAt: null },
+    });
+  }
+
+  // Check whether another accepted lead already shares the same phone or place_id
+  async existsDuplicate(params: ExistsDuplicateParams): Promise<boolean> {
+    const excluded: string[] = [PipelineStage.RAW, PipelineStage.NORMALIZED];
+
+    if (params.phone) {
+      const count = await this.prisma.lead.count({
+        where: {
+          id: { not: params.id },
+          phone: params.phone,
+          pipelineStage: { notIn: excluded },
+          deletedAt: null,
+        },
+      });
+      if (count > 0) return true;
+    }
+
+    if (params.document) {
+      const count = await this.prisma.lead.count({
+        where: {
+          id: { not: params.id },
+          document: params.document,
+          pipelineStage: { notIn: excluded },
+          deletedAt: null,
+        },
+      });
+      if (count > 0) return true;
+    }
+
+    return false;
+  }
+
+  // Update only the pipeline stage and mark the lead as processed
+  async updateStage(id: string, stage: string): Promise<void> {
+    await this.prisma.lead.update({
+      where: { id },
+      data: { pipelineStage: stage, processed: false },
+    });
+  }
+
+  // Soft-delete a duplicate lead by setting deletedAt
+  async deleteLead(id: string): Promise<void> {
+    await this.prisma.lead.update({
+      where: { id },
+      data: { deletedAt: new Date(), pipelineStage: PipelineStage.DUPLICATE },
+    });
   }
 }
