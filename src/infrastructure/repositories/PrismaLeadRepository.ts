@@ -31,6 +31,7 @@ export class PrismaLeadRepository implements ILeadRepository {
         source: lead.source,
         rawData: lead.rawData as Prisma.InputJsonValue,
         pipelineStage: lead.pipelineStage ?? PipelineStage.RAW,
+        website: lead.website ?? null,
         processed: false,
       })),
       skipDuplicates: true,

@@ -1,5 +1,3 @@
-// src/shared/container/index.ts
-
 import { prisma } from '@infrastructure/database/prisma/client';
 import { PrismaLeadRepository } from '@infrastructure/repositories/PrismaLeadRepository';
 import { PrismaContactRepository } from '@infrastructure/repositories/PrismaContactRepository';

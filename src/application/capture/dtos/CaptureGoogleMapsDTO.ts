@@ -38,4 +38,5 @@ export interface GooglePlaceRaw {
   user_ratings_total?: number;
   formatted_phone_number?: string;
   international_phone_number?: string;
+  website?: string;
 }

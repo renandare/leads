@@ -41,6 +41,7 @@ export class CaptureGoogleMapsUseCase {
         source: LeadSource.GOOGLE_MAPS,
         rawData: place,
         pipelineStage: PipelineStage.RAW,
+        website: place.website ?? null,
       })),
     );
 

@@ -27,6 +27,7 @@ model Lead {
   size             String?   @db.VarChar(20)
   type             String?   @db.VarChar(30)
   rawData          Json?     @map("raw_data")
+  website          String?   @db.VarChar(500)
   enrichmentStatus String    @default("pending") @map("enrichment_status") @db.VarChar(20)
   pipelineStage    String    @default("raw") @map("pipeline_stage") @db.VarChar(30)
   processed        Boolean   @default(false)

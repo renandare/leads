@@ -10,6 +10,7 @@ export interface Lead {
   state: string | null;
   source: string;
   document: string | null;
+  website: string | null;
   size: string | null;
   type: string | null;
   rawData: unknown;
@@ -25,6 +26,7 @@ export interface CreateLeadData {
   source: string;
   rawData: unknown;
   pipelineStage?: string;
+  website?: string | null;
 }
 
 export interface UpdateLeadNormalizedData {

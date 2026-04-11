@@ -1,7 +1,3 @@
-// src/infrastructure/http/controllers/LeadController.ts
-// This file implements the LeadController for handling lead-related HTTP requests in the application.
-
-
 import { Request, Response } from 'express';
 
 import { NormalizeLeadsUseCase } from '@application/lead/use-cases/NormalizeLeadsUseCase';

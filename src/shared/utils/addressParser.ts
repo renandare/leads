@@ -8,7 +8,7 @@ const BR_STATES = [
 ];
 
 const CITY_STATE_REGEX = new RegExp(
-  `([A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ\\s]+?)\\s*-\\s*(${BR_STATES.join('|')})(?=[,\\s\\d]|$)`,
+  `([A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ\\s]+?)\\s*(?:-|,)\\s*(${BR_STATES.join('|')})(?=[,\\s\\d]|$)`,
   'gi',
 );
 
