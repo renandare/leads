@@ -68,6 +68,7 @@ export class PrismaLeadRepository implements ILeadRepository {
         address: data.address,
         city: data.city,
         state: data.state,
+        website: data.website,
         pipelineStage: data.pipelineStage,
         processed: true,
       },

@@ -27,7 +27,7 @@ export class NormalizeLeadsUseCase {
 
       for (const lead of leads) {
         try {
-          const { name, phone, address, city, state } = this.extractFields(lead);
+          const { name, phone, address, city, state, website } = this.extractFields(lead);
 
           await this.leadRepo.updateNormalized(lead.id, {
             name,
@@ -35,6 +35,7 @@ export class NormalizeLeadsUseCase {
             address,
             city,
             state,
+            website,
             pipelineStage: PipelineStage.NORMALIZED,
           });
 
@@ -57,6 +58,7 @@ export class NormalizeLeadsUseCase {
     address: string | null;
     city: string | null;
     state: string | null;
+    website: string | null;
   } {
     if (lead.source === LeadSource.GOOGLE_MAPS) {
       const raw = lead.rawData as GooglePlaceRaw;
@@ -64,9 +66,9 @@ export class NormalizeLeadsUseCase {
       const name = normalizeName(raw.name);
       const { city, state } = parseAddressFromGoogle(raw.formatted_address);
 
-      return { name, phone, address: raw.formatted_address ?? null, city, state };
+      return { name, phone, address: raw.formatted_address ?? null, city, state, website: raw.website ?? null };
     }
 
-    return { name: null, phone: null, address: null, city: null, state: null };
+    return { name: null, phone: null, address: null, city: null, state: null, website: null };
   }
 }

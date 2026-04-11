@@ -35,5 +35,6 @@ export interface UpdateLeadNormalizedData {
   address: string | null;
   city: string | null;
   state: string | null;
+  website: string | null;
   pipelineStage: string;
 }
