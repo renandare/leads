@@ -4,7 +4,6 @@
 export interface Lead {
   id: string;
   name: string | null;
-  phone: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -13,7 +12,6 @@ export interface Lead {
   website: string | null;
   size: string | null;
   type: string | null;
-  rawData: unknown;
   enrichmentStatus: string;
   pipelineStage: string;
   processed: boolean;
@@ -24,17 +22,14 @@ export interface Lead {
 
 export interface CreateLeadData {
   source: string;
-  rawData: unknown;
   pipelineStage?: string;
   website?: string | null;
 }
 
-export interface UpdateLeadNormalizedData {
-  name: string | null;
-  phone: string | null;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  website: string | null;
+export interface UpdateLeadEnrichedData {
+  document?: string | null; // resolved by name search when originally missing
+  size: string | null;
+  type: string | null;
+  enrichmentStatus: string; // 'done' | 'failed' | 'no_cnpj'
   pipelineStage: string;
 }

@@ -18,15 +18,13 @@ datasource db {
 model Lead {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name             String?   @db.VarChar(255)
-  phone            String?   @db.VarChar(20)
   address          String?   @db.Text
   city             String?   @db.VarChar(100)
   state            String?   @db.Char(2)
   source           String    @db.VarChar(50)
-  document         String?   @db.VarChar(20)
-  size             String?   @db.VarChar(20)
-  type             String?   @db.VarChar(30)
-  rawData          Json?     @map("raw_data")
+  document         String?   @unique @db.VarChar(20)
+  size             String?   @db.VarChar(50)
+  type             String?   @db.VarChar(100)
   website          String?   @db.VarChar(500)
   enrichmentStatus String    @default("pending") @map("enrichment_status") @db.VarChar(20)
   pipelineStage    String    @default("raw") @map("pipeline_stage") @db.VarChar(30)
@@ -35,7 +33,7 @@ model Lead {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  contact Contact?
+  contacts Contact[]
 
   @@index([pipelineStage], name: "idx_leads_pipeline_stage")
   @@index([processed], name: "idx_leads_processed")
@@ -47,7 +45,7 @@ model Lead {
 // ─────────────────────────────────────────────────────────────────────────────
 model Contact {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  leadId           String    @unique @map("lead_id") @db.Uuid
+  leadId           String    @map("lead_id") @db.Uuid
   phone            String?   @unique @db.VarChar(20)
   email            String[]  @default([])
   whatsapp         Boolean?

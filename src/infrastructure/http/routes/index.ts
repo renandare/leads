@@ -3,8 +3,8 @@
 import { Router, Request, Response } from 'express';
 
 import { prisma } from '@infrastructure/database/prisma/client';
-import captureRoutes from './capture.routes';
 import leadRoutes from './lead.routes';
+import jobRoutes from './job.routes';
 
 const router = Router();
 
@@ -18,7 +18,7 @@ router.get('/health', async (_req: Request, res: Response) => {
   });
 });
 
-router.use('/capture', captureRoutes);
 router.use('/leads', leadRoutes);
+router.use('/jobs', jobRoutes);
 
 export default router;

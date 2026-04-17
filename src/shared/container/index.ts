@@ -1,30 +1,21 @@
 import { prisma } from '@infrastructure/database/prisma/client';
 import { PrismaLeadRepository } from '@infrastructure/repositories/PrismaLeadRepository';
 import { PrismaContactRepository } from '@infrastructure/repositories/PrismaContactRepository';
-import { GoogleMapsService } from '@infrastructure/services/google/GoogleMapsService';
-import { CaptureGoogleMapsUseCase } from '@application/capture/use-cases/CaptureGoogleMapsUseCase';
-import { NormalizeLeadsUseCase } from '@application/lead/use-cases/NormalizeLeadsUseCase';
-import { DeduplicateLeadsUseCase } from '@application/lead/use-cases/DeduplicateLeadsUseCase';
-import { CaptureController } from '@infrastructure/http/controllers/CaptureController';
+import { CnpjService } from '@infrastructure/services/cnpj/CnpjService';
+import { EnrichLeadsUseCase } from '@application/lead/use-cases/EnrichLeadsUseCase';
 import { LeadController } from '@infrastructure/http/controllers/LeadController';
+import { JobController } from '@infrastructure/http/controllers/JobController';
 
-// Repositories
 const leadRepository = new PrismaLeadRepository(prisma);
 const contactRepository = new PrismaContactRepository(prisma);
+const cnpjService = new CnpjService();
 
-// External services
-const googleMapsService = new GoogleMapsService();
+const enrichLeadsUseCase = new EnrichLeadsUseCase(leadRepository, contactRepository, cnpjService);
 
-// Use cases
-const captureGoogleMapsUseCase = new CaptureGoogleMapsUseCase(googleMapsService, leadRepository);
-const normalizeLeadsUseCase = new NormalizeLeadsUseCase(leadRepository, contactRepository);
-const deduplicateLeadsUseCase = new DeduplicateLeadsUseCase(leadRepository);
-
-// Controllers
-const captureController = new CaptureController(captureGoogleMapsUseCase);
-const leadController = new LeadController(normalizeLeadsUseCase, deduplicateLeadsUseCase, leadRepository);
+const leadController = new LeadController(enrichLeadsUseCase, leadRepository);
+const jobController = new JobController();
 
 export const container = {
-  captureController,
   leadController,
+  jobController,
 };

@@ -2,10 +2,6 @@
 
 export enum PipelineStage {
   RAW = 'raw',
-  NORMALIZED = 'normalized',
-  DEDUPLICATED = 'deduplicated',
   ENRICHED = 'enriched',
-  CLASSIFIED = 'classified',
   VALIDATED = 'validated',
-  DUPLICATE = 'duplicate',
 }
