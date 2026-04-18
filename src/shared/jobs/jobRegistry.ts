@@ -54,6 +54,14 @@ class JobRegistry {
   list(): Job[] {
     return [...this.jobs.values()].reverse(); // newest first
   }
+
+  find(id: string): Job | undefined {
+    return this.jobs.get(id);
+  }
+
+  isRunning(name: string): boolean {
+    return [...this.jobs.values()].some(j => j.name === name && j.status === 'running');
+  }
 }
 
 export const jobRegistry = new JobRegistry();
