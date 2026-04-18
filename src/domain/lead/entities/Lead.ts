@@ -1,9 +1,9 @@
 // src/domain/lead/entities/Lead.ts
-// This file defines the Lead entity and related types for the lead management system.
 
 export interface Lead {
   id: string;
   name: string | null;
+  tradeName: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -14,6 +14,10 @@ export interface Lead {
   type: string | null;
   enrichmentStatus: string;
   pipelineStage: string;
+  retryCount: number;
+  lastError: string | null;
+  processing: boolean;
+  processingStartedAt: Date | null;
   processed: boolean;
   deletedAt: Date | null;
   createdAt: Date;
@@ -27,9 +31,14 @@ export interface CreateLeadData {
 }
 
 export interface UpdateLeadEnrichedData {
-  document?: string | null; // resolved by name search when originally missing
-  size: string | null;
-  type: string | null;
-  enrichmentStatus: string; // 'done' | 'failed' | 'no_cnpj'
+  document?: string | null;
+  name?: string;
+  tradeName?: string | null;
+  address?: string;
+  city?: string;
+  state?: string;
+  size?: string | null;
+  type?: string | null;
+  enrichmentStatus: string;
   pipelineStage: string;
 }
