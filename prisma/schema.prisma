@@ -18,6 +18,7 @@ datasource db {
 model Lead {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name             String?   @db.VarChar(255)
+  tradeName        String?   @map("trade_name") @db.VarChar(255)
   address          String?   @db.Text
   city             String?   @db.VarChar(100)
   state            String?   @db.Char(2)
@@ -28,15 +29,21 @@ model Lead {
   website          String?   @db.VarChar(500)
   enrichmentStatus String    @default("pending") @map("enrichment_status") @db.VarChar(20)
   pipelineStage    String    @default("raw") @map("pipeline_stage") @db.VarChar(30)
-  processed        Boolean   @default(false)
+  retryCount            Int       @default(0) @map("retry_count") @db.SmallInt
+  lastError             String?   @map("last_error") @db.Text
+  processing            Boolean   @default(false)
+  processingStartedAt   DateTime? @map("processing_started_at")
+  processed             Boolean   @default(false)
   deletedAt        DateTime? @map("deleted_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   contacts Contact[]
 
-  @@index([pipelineStage], name: "idx_leads_pipeline_stage")
-  @@index([processed], name: "idx_leads_processed")
+  @@index([pipelineStage],                          name: "idx_leads_pipeline_stage")
+  @@index([processed],                              name: "idx_leads_processed")
+  @@index([pipelineStage, processing],              name: "idx_leads_pipeline_processing")
+  @@index([pipelineStage, enrichmentStatus, processing], name: "idx_leads_pipeline_enrichment_processing")
   @@map("leads")
 }
 
@@ -49,9 +56,9 @@ model Contact {
   phone            String?   @unique @db.VarChar(20)
   email            String[]  @default([])
   whatsapp         Boolean?
-  preferredChannel String?   @map("preferred_channel") @db.VarChar(20)
+  preferredChannel String    @map("preferred_channel") @db.VarChar(20)
   contactType      String?   @map("contact_type") @db.VarChar(20)
-  priority         String?   @db.VarChar(10)
+  priority         String    @db.VarChar(10)
   stage            String    @default("new") @db.VarChar(30)
   score            Int       @default(0)
   priceSensitive   Boolean   @default(false) @map("price_sensitive")
