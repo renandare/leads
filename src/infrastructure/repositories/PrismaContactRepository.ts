@@ -2,55 +2,75 @@
 
 import { PrismaClient, Prisma } from '@prisma/client';
 
-import { IContactRepository, UpsertContactParams } from '@domain/contact/repositories/IContactRepository';
+import { IContactRepository } from '@domain/contact/repositories/IContactRepository';
 
 export class PrismaContactRepository implements IContactRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  // Upserts a contact for the given lead.
-  // Phone: keeps existing value if already set (receita_federal data is less reliable than
-  //        a previously verified number). Only sets from CNPJ when contact has no phone yet.
-  // Emails: always merges unique values.
-  async upsertContact(params: UpsertContactParams): Promise<void> {
+  // Creates or updates the single contact for a lead.
+  //   contact_type   = 'import'         (always)
+  //   whatsapp       = null             (always — set to null even if was true)
+  //   preferred_channel:
+  //     mobile phone → 'whatsapp'
+  //     landline / no phone → 'email'
+  //   priority:
+  //     mobile → 'high' | landline → 'low' | no phone → 'medium'
+  //
+  // All fields are diff-only: skips individual field if already equal to stored value.
+  // Skips entirely if there is nothing to store (no phone and no email).
+  async upsertContact(
+    leadId:   string,
+    phone:    string | null,
+    isMobile: boolean,
+    email:    string | null,
+  ): Promise<void> {
+    if (!phone && !email) return;
+
+    const preferredChannel = (phone && isMobile) ? 'whatsapp' : 'email';
+    const priority         = phone ? (isMobile ? 'high' : 'low') : 'medium';
+    const normalizedEmail  = email?.toLowerCase().trim() ?? null;
+
     const existing = await this.prisma.contact.findFirst({
-      where: { leadId: params.leadId },
-      select: { id: true, phone: true, email: true },
+      where:  { leadId },
+      select: { id: true, phone: true, email: true, preferredChannel: true,
+                contactType: true, whatsapp: true, priority: true },
     });
 
-    const phoneToSet = existing?.phone ?? params.phone ?? null;
-    const merged = [...new Set([...(existing?.email ?? []), ...params.emails])];
-
     if (existing) {
+      const updates: Record<string, unknown> = {};
+
+      if (phone && phone !== existing.phone)                       updates.phone            = phone;
+      if (normalizedEmail && !existing.email.includes(normalizedEmail))
+        updates.email = [...new Set([...existing.email, normalizedEmail])];
+      if (existing.preferredChannel !== preferredChannel)          updates.preferredChannel = preferredChannel;
+      if (existing.contactType      !== 'import')                  updates.contactType      = 'import';
+      if (existing.whatsapp         !== null)                      updates.whatsapp         = null;
+      if (existing.priority         !== priority)                  updates.priority         = priority;
+
+      if (Object.keys(updates).length === 0) return;
+
       try {
-        await this.prisma.contact.update({
-          where: { id: existing.id },
-          data: { phone: phoneToSet, email: merged },
-        });
+        await this.prisma.contact.update({ where: { id: existing.id }, data: updates });
       } catch (err) {
-        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-          // Phone already belongs to another contact — skip phone, update only emails
-          await this.prisma.contact.update({
-            where: { id: existing.id },
-            data: { email: merged },
-          });
-        } else {
-          throw err;
-        }
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return;
+        throw err;
       }
     } else {
       try {
         await this.prisma.contact.create({
-          data: { leadId: params.leadId, phone: params.phone ?? null, email: merged },
+          data: {
+            leadId,
+            phone,
+            email:            normalizedEmail ? [normalizedEmail] : [],
+            preferredChannel,
+            whatsapp:         null,
+            contactType:      'import',
+            priority,
+          },
         });
       } catch (err) {
-        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-          // Phone already belongs to another contact — create without phone
-          await this.prisma.contact.create({
-            data: { leadId: params.leadId, phone: null, email: merged },
-          });
-        } else {
-          throw err;
-        }
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return;
+        throw err;
       }
     }
   }

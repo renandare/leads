@@ -1,0 +1,3 @@
+ALTER TABLE leads
+  ADD COLUMN retry_count SMALLINT NOT NULL DEFAULT 0,
+  ADD COLUMN last_error  TEXT;
