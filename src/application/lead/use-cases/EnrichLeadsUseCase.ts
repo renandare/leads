@@ -10,23 +10,24 @@ import { CnpjService, CnpjData } from '@infrastructure/services/cnpj/CnpjService
 import { EnrichLeadsInput, EnrichLeadsOutput } from '../dtos/EnrichLeadDTO';
 
 // sleep(300 * (retryCount + 1) + jitter 0–200ms)
-// — fresh leads: 300–500ms  — 1st retry: 600–800ms  — 2nd retry: 900–1100ms
 function sleep(retryCount: number): Promise<void> {
   const ms = 300 * (retryCount + 1) + Math.floor(Math.random() * 200);
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Formats a raw phone string to +55DDDNUMBER and detects mobile.
-// ANATEL: mobile has 9-digit local starting with 9 (new format).
-// Receita Federal registries often use the old 8-digit format for mobiles —
-// so we also treat local.length === 8 && local.startsWith('9') as mobile.
+// Formats a raw phone string to +55DDDNUMBER to detects mobile.
+// ANATEL: mobile has 9-digit local starting with 9.
 function parsePhone(raw: string | null): { formatted: string | null; isMobile: boolean } {
   if (!raw) return { formatted: null, isMobile: false };
   let digits = raw.replace(/\D/g, '');
+
   if (digits.startsWith('55')) digits = digits.slice(2);
   if (digits.length < 10 || digits.length > 11) return { formatted: null, isMobile: false };
+
   const local = digits.slice(2); // remove DDD (2 digits)
-  const isMobile = local.startsWith('9') && (local.length === 8 || local.length === 9);
+  
+  // Receita Federal registries often use the old 8-digit format for mobiles
+  const isMobile = local.startsWith('9') && (local.length === 8 || local.length === 9); 
   return { formatted: `+55${digits}`, isMobile };
 }
 
@@ -34,17 +35,26 @@ function parsePhone(raw: string | null): { formatted: string | null; isMobile: b
 function buildLeadUpdate(lead: Lead, cnpj: CnpjData): Partial<UpdateLeadEnrichedData> {
   const update: Partial<UpdateLeadEnrichedData> = {};
 
-  if (cnpj.razaoSocial && cnpj.razaoSocial !== lead.name)        update.name      = cnpj.razaoSocial;
-  if (cnpj.fantasia    !== undefined && cnpj.fantasia !== lead.tradeName) update.tradeName = cnpj.fantasia;
+  // Verify razaosocial
+  if (cnpj.razaoSocial && cnpj.razaoSocial !== lead.name){
+    update.name = cnpj.razaoSocial;
+  }
+  if (cnpj.fantasia !== undefined && cnpj.fantasia !== lead.tradeName){
+    update.tradeName = cnpj.fantasia;
+  }
 
+  // address
   const street = [cnpj.logradouro, cnpj.numero].filter(Boolean).join(', ');
   if (street) {
     const address = cnpj.bairro ? `${street} - ${cnpj.bairro}` : street;
-    if (address !== lead.address) update.address = address;
+    if (address !== lead.address){
+       update.address = address;
+    }
   }
 
-  if (cnpj.municipio        && cnpj.municipio        !== lead.city)  update.city  = cnpj.municipio;
-  if (cnpj.uf               && cnpj.uf               !== lead.state) update.state = cnpj.uf;
+  // city and state
+  if (cnpj.municipio && cnpj.municipio !== lead.city)  update.city  = cnpj.municipio;
+  if (cnpj.uf && cnpj.uf !== lead.state) update.state = cnpj.uf;
   if (cnpj.naturezaJuridica && cnpj.naturezaJuridica !== lead.size)  update.size  = cnpj.naturezaJuridica;
 
   const type = cnaeToLeadType(cnpj.cnae);
@@ -53,7 +63,7 @@ function buildLeadUpdate(lead: Lead, cnpj: CnpjData): Partial<UpdateLeadEnriched
   return update;
 }
 
-// Outcome of processing a single lead — used to update counters and detect bail
+// Outcome of processing a single lead, used to update counters and detect bail
 type LeadOutcome = 'done' | 'no_cnpj' | 'invalid_cnpj' | 'failed' | 'bail';
 
 export class EnrichLeadsUseCase {
@@ -75,6 +85,7 @@ export class EnrichLeadsUseCase {
     await sleep(lead.retryCount);
 
     try {
+      // Try to fetch enrichment data from CNPJ service (API BRASIL/ReceitaWS)
       const result = await this.cnpjService.fetch(lead.document);
 
       if (!result.ok) {
@@ -98,6 +109,7 @@ export class EnrichLeadsUseCase {
 
       const phone = parsePhone(result.data.phone);
       await this.contactRepo.upsertContact(lead.id, phone.formatted, phone.isMobile, result.data.email);
+
       return 'done';
     } catch (err) {
       await this.leadRepo.incrementRetry(lead.id, err instanceof Error ? err.message : String(err));

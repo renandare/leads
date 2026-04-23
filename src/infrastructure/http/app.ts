@@ -2,7 +2,7 @@ import 'express-async-errors';
 import 'dotenv/config';
 
 import cors from 'cors';
-import express from 'express';
+import express, { Request } from 'express';
 import helmet from 'helmet';
 
 import { errorMiddleware } from './middlewares/error.middleware';
@@ -12,7 +12,13 @@ const app = express();
 
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+
+// Capture raw body buffer before JSON parsing — required for webhook HMAC verification.
+app.use(express.json({
+  verify: (req: Request & { rawBody?: Buffer }, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 
 app.use(router);
 
