@@ -22,4 +22,8 @@ export interface IContactRepository {
 
   // Sets lastReplyAt = now() on the contact.
   touchLastReplyAt(id: string): Promise<void>;
+
+  // Sets lastContactAt = now() and increments contactCount30d.
+  // Called after every successful outbound send.
+  trackOutboundSent(id: string): Promise<void>;
 }

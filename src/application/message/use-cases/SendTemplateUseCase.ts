@@ -72,10 +72,16 @@ export class SendTemplateUseCase {
         .findOpenByContactId(contact.id)
         .then(c => c?.id ?? null)
         .catch(() => null);
-      
+
         //DB record is created BEFORE the API call
         await persistWamid(this.messageRepo, messageId, wamid, conversationId);
     }
+
+    // Track send (fire-and-forget — never fail the send over a tracking update)
+    if (contact) {
+      this.contactRepo.trackOutboundSent(contact.id).catch(() => {});
+    }
+
     return { messageId, contactId: contact?.id ?? null, wamid, created: true };
   }
 }
@@ -86,6 +92,18 @@ export function assertSendable(contact: Contact): void {
     throw new AppError('Contact WhatsApp number is invalid', 422);
   if (contact.status === 'unsubscribed' || contact.unsubscribed)
     throw new AppError('Contact is unsubscribed', 422);
+
+  const capDays   = parseInt(process.env.FREQUENCY_CAP_DAYS    ?? '7', 10);
+  const capMax30d = parseInt(process.env.FREQUENCY_CAP_MAX_30D ?? '3', 10);
+
+  if (contact.contactCount30d >= capMax30d)
+    throw new AppError(`Contact has reached the send limit (${capMax30d}) for the last 30 days`, 429);
+
+  if (contact.lastContactAt) {
+    const daysSince = (Date.now() - contact.lastContactAt.getTime()) / 86_400_000;
+    if (daysSince < capDays)
+      throw new AppError(`Contact was reached ${Math.floor(daysSince)}d ago — minimum interval is ${capDays}d`, 429);
+  }
 }
 
 // Normalizes phone number 

@@ -76,6 +76,11 @@ export class SendTextUseCase {
       await persistWamid(this.messageRepo, messageId, wamid, openConvId);
     }
 
+    // Track send (fire-and-forget — never fail the send over a tracking update)
+    if (contact) {
+      this.contactRepo.trackOutboundSent(contact.id).catch(() => {});
+    }
+
     return { messageId, contactId: contact?.id ?? null, wamid, created: true };
   }
 }

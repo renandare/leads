@@ -104,6 +104,7 @@ beforeEach(() => {
     findByPhone:        jest.fn(),
     setWhatsappByLeadId: jest.fn(),
     touchLastReplyAt:   jest.fn(),
+    trackOutboundSent:  jest.fn(),
   } as jest.Mocked<IContactRepository>;
 
   interactionRepo = {

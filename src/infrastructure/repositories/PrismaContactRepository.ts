@@ -125,4 +125,14 @@ export class PrismaContactRepository implements IContactRepository {
       data: { lastReplyAt: new Date() },
     });
   }
+
+  async trackOutboundSent(id: string): Promise<void> {
+    await this.prisma.contact.update({
+      where: { id },
+      data: {
+        lastContactAt:   new Date(),
+        contactCount30d: { increment: 1 },
+      },
+    });
+  }
 }

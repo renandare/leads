@@ -74,6 +74,7 @@ beforeEach(() => {
     findByPhone:         jest.fn().mockResolvedValue(makeContact()),
     setWhatsappByLeadId: jest.fn(),
     touchLastReplyAt:    jest.fn(),
+    trackOutboundSent:   jest.fn().mockResolvedValue(undefined),
   } as jest.Mocked<IContactRepository>;
 
   messageRepo = {
@@ -99,6 +100,9 @@ beforeEach(() => {
   useCase = new SendTextUseCase(contactRepo, messageRepo, conversationRepo, whatsApp);
   (useCase as unknown as { limiter: { throttle: jest.Mock } }).limiter.throttle =
     jest.fn().mockResolvedValue(undefined);
+
+  process.env.FREQUENCY_CAP_DAYS    = '7';
+  process.env.FREQUENCY_CAP_MAX_30D = '3';
 });
 
 afterEach(() => jest.resetAllMocks());
@@ -131,6 +135,11 @@ describe('success — contact in CRM with open conversation window', () => {
   it('persists wamid linked to the open conversation', async () => {
     await useCase.execute(makeInput());
     expect(messageRepo.updateWamid).toHaveBeenCalledWith(MSG_ID, WAMID, CONV_ID);
+  });
+
+  it('calls trackOutboundSent with contact.id after successful send', async () => {
+    await useCase.execute(makeInput());
+    expect(contactRepo.trackOutboundSent).toHaveBeenCalledWith(CONTACT_ID);
   });
 });
 
@@ -181,6 +190,11 @@ describe('direct send — number NOT in CRM', () => {
     await useCase.execute(makeInput());
     expect(whatsApp.sendText).toHaveBeenCalledTimes(1);
   });
+
+  it('does NOT call trackOutboundSent for direct sends', async () => {
+    await useCase.execute(makeInput());
+    expect(contactRepo.trackOutboundSent).not.toHaveBeenCalled();
+  });
 });
 
 // ─── Idempotency ──────────────────────────────────────────────────────────────
@@ -195,6 +209,15 @@ describe('idempotency (duplicate clientMessageId)', () => {
     expect(result.created).toBe(false);
     expect(result.wamid).toBe('wamid.already-sent');
     expect(whatsApp.sendText).not.toHaveBeenCalled();
+  });
+
+  it('does NOT call trackOutboundSent on duplicate (no send happened)', async () => {
+    messageRepo.createPending.mockResolvedValue({
+      message: makeMessage({ wamid: 'wamid.already-sent', status: 'sent' }),
+      created: false,
+    });
+    await useCase.execute(makeInput());
+    expect(contactRepo.trackOutboundSent).not.toHaveBeenCalled();
   });
 });
 
@@ -214,6 +237,34 @@ describe('contact guards', () => {
 
   it('proceeds when whatsapp === null (not yet validated)', async () => {
     contactRepo.findByPhone.mockResolvedValue(makeContact({ whatsapp: null }));
+    await expect(useCase.execute(makeInput())).resolves.toBeDefined();
+  });
+});
+
+// ─── Frequency cap ────────────────────────────────────────────────────────────
+
+describe('frequency cap', () => {
+  it('throws 429 when contactCount30d reaches the limit', async () => {
+    contactRepo.findByPhone.mockResolvedValue(makeContact({ contactCount30d: 3 }));
+    await expect(useCase.execute(makeInput())).rejects.toMatchObject({ statusCode: 429 });
+    expect(whatsApp.sendText).not.toHaveBeenCalled();
+  });
+
+  it('throws 429 when last contact was within the minimum interval', async () => {
+    const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000);
+    contactRepo.findByPhone.mockResolvedValue(makeContact({ lastContactAt: threeDaysAgo }));
+    await expect(useCase.execute(makeInput())).rejects.toMatchObject({ statusCode: 429 });
+    expect(whatsApp.sendText).not.toHaveBeenCalled();
+  });
+
+  it('proceeds when contactCount30d is below the limit', async () => {
+    contactRepo.findByPhone.mockResolvedValue(makeContact({ contactCount30d: 2 }));
+    await expect(useCase.execute(makeInput())).resolves.toBeDefined();
+  });
+
+  it('proceeds when last contact was outside the minimum interval', async () => {
+    const eightDaysAgo = new Date(Date.now() - 8 * 86_400_000);
+    contactRepo.findByPhone.mockResolvedValue(makeContact({ lastContactAt: eightDaysAgo }));
     await expect(useCase.execute(makeInput())).resolves.toBeDefined();
   });
 });
@@ -246,6 +297,12 @@ describe('error handling', () => {
     whatsApp.sendText.mockRejectedValue(new Error('Meta API error'));
     await expect(useCase.execute(makeInput())).rejects.toThrow();
     expect(messageRepo.updateStatusById).not.toHaveBeenCalled();
+  });
+
+  it('does NOT call trackOutboundSent when Meta API fails', async () => {
+    whatsApp.sendText.mockRejectedValue(new Error('Meta 131047: re-engagement required'));
+    await expect(useCase.execute(makeInput())).rejects.toThrow();
+    expect(contactRepo.trackOutboundSent).not.toHaveBeenCalled();
   });
 
   it('retries updateWamid once on first failure', async () => {
