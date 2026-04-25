@@ -10,7 +10,7 @@ import { Contact } from '@domain/contact/entities/Contact';
 import { Conversation } from '@domain/conversation/entities/Conversation';
 import { Message } from '@domain/message/entities/Message';
 
-// ─── Factories ────────────────────────────────────────────────────────────────
+// Factories
 
 const CONTACT_ID = 'contact-uuid-1';
 const LEAD_ID    = 'lead-uuid-1';
@@ -59,7 +59,7 @@ function makeInput(overrides: Partial<{ to: string; body: string; clientMessageI
   };
 }
 
-// ─── Setup ────────────────────────────────────────────────────────────────────
+// Setup 
 
 let contactRepo:      jest.Mocked<IContactRepository>;
 let messageRepo:      jest.Mocked<IMessageRepository>;
@@ -75,6 +75,7 @@ beforeEach(() => {
     setWhatsappByLeadId: jest.fn(),
     touchLastReplyAt:    jest.fn(),
     trackOutboundSent:   jest.fn().mockResolvedValue(undefined),
+    unsubscribeById:     jest.fn(),
   } as jest.Mocked<IContactRepository>;
 
   messageRepo = {
@@ -107,7 +108,7 @@ beforeEach(() => {
 
 afterEach(() => jest.resetAllMocks());
 
-// ─── Success — contact in CRM with open window ────────────────────────────────
+// Success — contact in CRM with open window 
 
 describe('success — contact in CRM with open conversation window', () => {
   it('returns messageId, contactId, wamid, created=true', async () => {
@@ -143,7 +144,7 @@ describe('success — contact in CRM with open conversation window', () => {
   });
 });
 
-// ─── 24h window enforcement ───────────────────────────────────────────────────
+// 24h window enforcement 
 
 describe('24h conversation window enforcement', () => {
   it('throws 422 when no open conversation exists for a known contact', async () => {
@@ -167,7 +168,7 @@ describe('24h conversation window enforcement', () => {
   });
 });
 
-// ─── Direct send (number not in CRM) ─────────────────────────────────────────
+// Direct send (number not in CRM) 
 
 describe('direct send — number NOT in CRM', () => {
   beforeEach(() => {
@@ -197,7 +198,7 @@ describe('direct send — number NOT in CRM', () => {
   });
 });
 
-// ─── Idempotency ──────────────────────────────────────────────────────────────
+// Idempotency
 
 describe('idempotency (duplicate clientMessageId)', () => {
   it('returns existing record without re-sending', async () => {
@@ -221,7 +222,7 @@ describe('idempotency (duplicate clientMessageId)', () => {
   });
 });
 
-// ─── Contact guards ───────────────────────────────────────────────────────────
+// Contact guards
 
 describe('contact guards', () => {
   it('throws 422 when whatsapp === false (invalid number)', async () => {
@@ -241,7 +242,7 @@ describe('contact guards', () => {
   });
 });
 
-// ─── Frequency cap ────────────────────────────────────────────────────────────
+// Frequency cap
 
 describe('frequency cap', () => {
   it('throws 429 when contactCount30d reaches the limit', async () => {
@@ -269,7 +270,7 @@ describe('frequency cap', () => {
   });
 });
 
-// ─── Error handling ───────────────────────────────────────────────────────────
+// Error handling
 
 describe('error handling', () => {
   it('marks message as failed and re-throws on Meta API error', async () => {

@@ -1,7 +1,7 @@
 // tests/webhook/WebhookProcessor.test.ts
 // Unit tests — all repositories are mocked.
 
-import { WebhookProcessor, MetaWebhookPayload } from '@application/webhook/WebhookProcessor';
+import { WebhookProcessor, MetaWebhookPayload, extractContent, isOptOut } from '@application/webhook/WebhookProcessor';
 import { IContactRepository } from '@domain/contact/repositories/IContactRepository';
 import { IInteractionRepository } from '@domain/interaction/repositories/IInteractionRepository';
 import { IMessageRepository } from '@domain/message/repositories/IMessageRepository';
@@ -9,7 +9,7 @@ import { IConversationRepository } from '@domain/conversation/repositories/IConv
 import { Contact } from '@domain/contact/entities/Contact';
 import { Conversation } from '@domain/conversation/entities/Conversation';
 
-// ─── Mock factories ───────────────────────────────────────────────────────────
+// Mock factories
 
 const WAMID     = 'wamid.test001';
 const CONTACT_ID = 'contact-uuid-1';
@@ -36,6 +36,8 @@ function makeConversation(): Conversation {
 
 function makePayload(message: Partial<{
   from: string; id: string; type: string; text: { body: string }; to: string;
+  button: { payload: string; text: string };
+  interactive: { type: string; button_reply?: { id: string; title: string } };
 }>): MetaWebhookPayload {
   return {
     object: 'whatsapp_business_account',
@@ -89,7 +91,7 @@ function makeStatusPayload(status: string, withConversation = false): MetaWebhoo
   };
 }
 
-// ─── setup ───────────────────────────────────────────────────────────────────
+// setup
 
 let contactRepo:      jest.Mocked<IContactRepository>;
 let interactionRepo:  jest.Mocked<IInteractionRepository>;
@@ -105,6 +107,7 @@ beforeEach(() => {
     setWhatsappByLeadId: jest.fn(),
     touchLastReplyAt:   jest.fn(),
     trackOutboundSent:  jest.fn(),
+    unsubscribeById:    jest.fn().mockResolvedValue(undefined),
   } as jest.Mocked<IContactRepository>;
 
   interactionRepo = {
@@ -139,7 +142,7 @@ beforeEach(() => {
 
 afterEach(() => jest.resetAllMocks());
 
-// ─── Inbound message ─────────────────────────────────────────────────────────
+// Inbound message 
 
 describe('inbound message', () => {
   beforeEach(() => {
@@ -198,7 +201,7 @@ describe('inbound message', () => {
   });
 });
 
-// ─── Echo detection ───────────────────────────────────────────────────────────
+// Echo detection
 
 describe('echo (Linked Mode)', () => {
   const OWNER     = '5514000000000';
@@ -249,7 +252,7 @@ describe('echo (Linked Mode)', () => {
   });
 });
 
-// ─── Status updates ──────────────────────────────────────────────────────────
+// Status updates
 
 describe('status update', () => {
   it('updates message status to delivered', async () => {
@@ -326,7 +329,7 @@ describe('status update', () => {
   });
 });
 
-// ─── Payload routing ─────────────────────────────────────────────────────────
+// Payload routing 
 
 describe('payload routing', () => {
   it('ignores entries with field != messages', async () => {
@@ -363,5 +366,114 @@ describe('payload routing', () => {
     };
 
     await expect(processor.process(payload)).resolves.not.toThrow();
+  });
+});
+
+// Button / interactive content parsing
+
+describe('extractContent helper', () => {
+  it('extracts text body', () => {
+    expect(extractContent({ from: '', id: '', timestamp: '', type: 'text', text: { body: 'Olá' } })).toBe('Olá');
+  });
+
+  it('extracts quick reply button text', () => {
+    expect(extractContent({ from: '', id: '', timestamp: '', type: 'button', button: { payload: 'p', text: 'Sim' } })).toBe('Sim');
+  });
+
+  it('extracts interactive button_reply title', () => {
+    expect(extractContent({
+      from: '', id: '', timestamp: '', type: 'interactive',
+      interactive: { type: 'button_reply', button_reply: { id: 'b1', title: 'Agora não' } },
+    })).toBe('Agora não');
+  });
+
+  it('returns null for image and other media types', () => {
+    expect(extractContent({ from: '', id: '', timestamp: '', type: 'image' })).toBeNull();
+  });
+
+  it('returns null when button field is absent', () => {
+    expect(extractContent({ from: '', id: '', timestamp: '', type: 'button' })).toBeNull();
+  });
+});
+
+// isOptOut helper
+
+describe('isOptOut helper', () => {
+  it.each([
+    'SAIR', 'sair', 'Stop', 'STOP', 'Parar', 'Cancelar',
+    'Nao quero', 'Não tenho interesse', 'nao tenho interesse',
+  ])('detects opt-out for "%s"', (text) => {
+    expect(isOptOut(text)).toBe(true);
+  });
+
+  it.each([
+    'Sim', 'Agora não', 'Compro quando preciso', 'Já tenho', 'Olá',
+  ])('does NOT flag "%s" as opt-out', (text) => {
+    expect(isOptOut(text)).toBe(false);
+  });
+
+  it('returns false for null', () => {
+    expect(isOptOut(null)).toBe(false);
+  });
+});
+
+// Inbound — button / interactive / opt-out 
+
+describe('inbound — button responses', () => {
+  beforeEach(() => {
+    contactRepo.findByPhone.mockResolvedValue(makeContact());
+  });
+
+  it('saves interaction with button text as content', async () => {
+    await processor.process(makePayload({
+      type: 'button',
+      button: { payload: 'yes', text: 'Sim' },
+      text: undefined,
+    }));
+
+    expect(interactionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ classification: 'button', content: 'Sim' }),
+    );
+  });
+
+  it('saves interaction with interactive button_reply title as content', async () => {
+    await processor.process(makePayload({
+      type: 'interactive',
+      interactive: { type: 'button_reply', button_reply: { id: 'b1', title: 'Agora não' } },
+      text: undefined,
+    }));
+
+    expect(interactionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ classification: 'interactive', content: 'Agora não' }),
+    );
+  });
+
+  it('calls unsubscribeById when button text is "Não tenho interesse"', async () => {
+    await processor.process(makePayload({
+      type: 'button',
+      button: { payload: 'no_interest', text: 'Não tenho interesse' },
+      text: undefined,
+    }));
+
+    expect(contactRepo.unsubscribeById).toHaveBeenCalledWith(CONTACT_ID);
+  });
+
+  it('calls unsubscribeById when text message is "SAIR"', async () => {
+    await processor.process(makePayload({ type: 'text', text: { body: 'SAIR' } }));
+
+    expect(contactRepo.unsubscribeById).toHaveBeenCalledWith(CONTACT_ID);
+  });
+
+  it('does NOT call unsubscribeById for normal replies', async () => {
+    await processor.process(makePayload({ type: 'button', button: { payload: 'yes', text: 'Sim' }, text: undefined }));
+
+    expect(contactRepo.unsubscribeById).not.toHaveBeenCalled();
+  });
+
+  it('still saves interaction even on opt-out', async () => {
+    await processor.process(makePayload({ type: 'text', text: { body: 'STOP' } }));
+
+    expect(interactionRepo.create).toHaveBeenCalled();
+    expect(contactRepo.unsubscribeById).toHaveBeenCalledWith(CONTACT_ID);
   });
 });

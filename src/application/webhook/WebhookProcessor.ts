@@ -38,6 +38,12 @@ export interface MetaMessage {
   type:      string;
   to?:       string;  // present in echo messages (business reply via app)
   text?:     { body: string };
+  button?:   { payload: string; text: string };  // quick reply tap
+  interactive?: {
+    type:          string;
+    button_reply?: { id: string; title: string };
+    list_reply?:   { id: string; title: string; description?: string };
+  };
 }
 
 export interface MetaStatus {
@@ -114,7 +120,7 @@ export class WebhookProcessor {
       return;
     }
 
-    const content = msg.type === 'text' ? (msg.text?.body ?? null) : null;
+    const content = extractContent(msg);
 
     await this.interactionRepo.create({
       contactId:     contact.id,
@@ -125,6 +131,13 @@ export class WebhookProcessor {
     });
 
     await this.contactRepo.touchLastReplyAt(contact.id);
+
+    if (isOptOut(content)) {
+      logger.info('[Webhook] opt-out detected — unsubscribing contact', { contactId: contact.id });
+      await this.contactRepo.unsubscribeById(contact.id).catch(err =>
+        logger.error('[Webhook] unsubscribeById error', { contactId: contact.id, error: String(err) }),
+      );
+    }
   }
 
   //Echo (message sent from the WhatsApp app in Linked Mode)
@@ -145,15 +158,13 @@ export class WebhookProcessor {
       logger.debug('[Webhook] echo recipient not found in CRM', { wamid: msg.id, to: recipientPhone });
       return;
     }
-
-    const content = msg.type === 'text' ? (msg.text?.body ?? null) : null;
-
+    // Persist the message as an interaction for better visibility in the CRM, and future use (opt-out detection on manual messages)
     await this.interactionRepo.create({
       contactId:      contact.id,
       metaMessageId:  msg.id,
       type:           'manual_shop_response',
       classification: msg.type,
-      content,
+      content:        extractContent(msg),
     });
   }
 
@@ -182,4 +193,36 @@ export class WebhookProcessor {
       await this.messageRepo.linkConversationByWamid(status.id, conv.id);
     }
   }
+}
+
+// Extracts content from any message type for opt-out detection and other uses. 
+// Returns null if no extractable content is found.
+export function extractContent(msg: MetaMessage): string | null {
+  switch (msg.type) {
+    case 'text':        return msg.text?.body ?? null;
+    case 'button':      return msg.button?.text ?? null;
+    case 'interactive': return (
+      msg.interactive?.button_reply?.title ??
+      msg.interactive?.list_reply?.title ??
+      null
+    );
+    default:            return null;
+  }
+}
+
+// Keywords that indicate an opt-out
+const OPT_OUT_KEYWORDS = new Set([
+    'sair', 'stop', 'parar', 'cancelar', 'nao quero',
+    'nao tenho interesse', 'não tenho interesse',
+]);
+
+// Returns true if the content matches any opt-out keyword
+export function isOptOut(content: string | null): boolean {
+  if (!content) return false;
+  const normalized = content
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')  // strip accents
+    .trim();
+  return OPT_OUT_KEYWORDS.has(normalized);
 }

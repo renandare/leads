@@ -107,11 +107,13 @@ export class PrismaContactRepository implements IContactRepository {
     return (row as unknown as Contact) ?? null;
   }
 
+  // Finds a contact by ID
   async findById(id: string): Promise<Contact | null> {
     const row = await this.prisma.contact.findUnique({ where: { id } });
     return (row as unknown as Contact) ?? null;
   }
 
+  // Sets the WhatsApp=true for a contact by lead ID
   async setWhatsappByLeadId(leadId: string, whatsapp: boolean): Promise<void> {
     await this.prisma.contact.updateMany({
       where: { leadId },
@@ -119,6 +121,7 @@ export class PrismaContactRepository implements IContactRepository {
     });
   }
 
+  // Updates the last reply timestamp for a contact by ID
   async touchLastReplyAt(id: string): Promise<void> {
     await this.prisma.contact.update({
       where: { id },
@@ -126,12 +129,25 @@ export class PrismaContactRepository implements IContactRepository {
     });
   }
 
+  // Updates the last contact timestamp and increments the 30d contact count for a contact by ID
   async trackOutboundSent(id: string): Promise<void> {
     await this.prisma.contact.update({
       where: { id },
       data: {
         lastContactAt:   new Date(),
         contactCount30d: { increment: 1 },
+      },
+    });
+  }
+
+  // Unsubscribes a contact by ID
+  async unsubscribeById(id: string): Promise<void> {
+    await this.prisma.contact.update({
+      where: { id },
+      data: {
+        unsubscribed:    true,
+        unsubscribedAt:  new Date(),
+        status:          'unsubscribed',
       },
     });
   }

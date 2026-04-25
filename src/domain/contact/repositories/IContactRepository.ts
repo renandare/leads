@@ -26,4 +26,7 @@ export interface IContactRepository {
   // Sets lastContactAt = now() and increments contactCount30d.
   // Called after every successful outbound send.
   trackOutboundSent(id: string): Promise<void>;
+
+  // Sets unsubscribed = true, unsubscribedAt = now(), status = 'unsubscribed'.
+  unsubscribeById(id: string): Promise<void>;
 }
