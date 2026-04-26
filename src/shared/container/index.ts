@@ -11,6 +11,7 @@ import { WhatsAppProvider } from '@infrastructure/services/whatsapp/WhatsAppProv
 import { EnrichLeadsUseCase } from '@application/lead/use-cases/EnrichLeadsUseCase';
 import { SendTemplateUseCase } from '@application/message/use-cases/SendTemplateUseCase';
 import { SendTextUseCase } from '@application/message/use-cases/SendTextUseCase';
+import { RetryWorker } from '@application/message/RetryWorker';
 import { WebhookProcessor } from '@application/webhook/WebhookProcessor';
 import { LeadController } from '@infrastructure/http/controllers/LeadController';
 import { JobController } from '@infrastructure/http/controllers/JobController';
@@ -51,6 +52,12 @@ const webhookProcessor = new WebhookProcessor(
   interactionRepository,
   messageRepository,
   conversationRepository,
+);
+
+export const retryWorker = new RetryWorker(
+  messageRepository,
+  contactRepository,
+  whatsAppProvider,
 );
 
 const leadController    = new LeadController(enrichLeadsUseCase, leadRepository);

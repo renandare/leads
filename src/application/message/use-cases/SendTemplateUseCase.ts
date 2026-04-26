@@ -11,6 +11,9 @@ import { logger } from '@shared/utils/logger';
 import { AppError } from '@shared/errors/AppError';
 import { SendTemplateInput, SendTemplateOutput } from '../dtos/SendTemplateDTO';
 
+// Backoff delays in minutes for retries 0 or 1, 1 or 2, 2 or 3 (5,15,45min).
+export const BACKOFF_MINUTES = [5, 15, 45] as const;
+
 export class SendTemplateUseCase {
   private readonly limiter = new RateLimiter(1_000);
 
@@ -33,7 +36,7 @@ export class SendTemplateUseCase {
       const { message, created } = await this.messageRepo.createPending({
         contactId:       contact.id,
         channel:         'whatsapp',
-        body:            input.templateName,
+        body:            serializeTemplatePayload(input.templateName, input.languageCode, input.params), // now the body contains the serialized payload for retry support
         clientMessageId: input.clientMessageId,
       });
       // Duplicate clientMessageId — return existing record without re-sending preventing double-sends on retry.
@@ -56,9 +59,7 @@ export class SendTemplateUseCase {
       wamid = result.wamid;
     } catch (err) {
       if (messageId) {
-        await this.messageRepo.updateStatusById(messageId, 'failed',
-          err instanceof Error ? err.message : String(err),
-        ).catch(() => {});
+        await handleSendFailure(this.messageRepo, messageId, 0, err); // Now, schedules retries or marks as failed
       }
       if (contact && isNotOnWhatsApp(err)) {
         await this.contactRepo.setWhatsappByLeadId(contact.leadId, false).catch(() => {});
@@ -106,12 +107,12 @@ export function assertSendable(contact: Contact): void {
   }
 }
 
-// Normalizes phone number 
+// Normalizes phone number
 export function normalizePhone(to: string): string {
   return to.startsWith('+') ? to : `+${to}`;
 }
 
-// Meta error code 131026 = number is not registered on WhatsApp. 
+// Meta error code 131026 = number is not registered on WhatsApp.
 export function isNotOnWhatsApp(err: unknown): boolean {
   return /131026/.test(err instanceof Error ? err.message : String(err));
 }
@@ -134,5 +135,53 @@ export async function persistWamid(
         messageId, wamid, error: String(secondErr),
       });
     }
+  }
+}
+
+// Schedules a retry or marks as failed when `isNotOnWhatsApp` error or retryCount >= 3
+export async function handleSendFailure(
+  messageRepo: IMessageRepository,
+  messageId:   string,
+  retryCount:  number,
+  err:         unknown,
+): Promise<void> {
+  const reason = err instanceof Error ? err.message : String(err);
+  if (isNotOnWhatsApp(err) || retryCount >= BACKOFF_MINUTES.length) {
+    await messageRepo.updateStatusById(messageId, 'failed', reason).catch(() => {});
+  } else {
+    const delayMs = BACKOFF_MINUTES[retryCount] * 60_000;
+    await messageRepo.scheduleRetry(messageId, new Date(Date.now() + delayMs)).catch(() => {});
+  }
+}
+
+// Serializes template send params into the message body field for retry support
+export function serializeTemplatePayload(
+  templateName: string,
+  languageCode:  string,
+  params:        string[],
+): string {
+  return JSON.stringify({ type: 'template', templateName, languageCode, params });
+}
+
+// Serializes a text body into the message body field
+export function serializeTextPayload(body: string): string {
+  return JSON.stringify({ type: 'text', body });
+}
+
+// Types and parsers for the serialized message body used for retries
+export type MessagePayload =
+  | { type: 'template'; templateName: string; languageCode: string; params: string[] }
+  | { type: 'text'; body: string };
+
+// Parses the serialized body. Returns null if body is missing or malformed.
+export function parseMessagePayload(raw: string | null): MessagePayload | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.type === 'template' && parsed.templateName) return parsed as MessagePayload;
+    if (parsed.type === 'text' && typeof parsed.body === 'string') return parsed as MessagePayload;
+    return null;
+  } catch {
+    return null;
   }
 }

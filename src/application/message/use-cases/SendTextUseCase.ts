@@ -8,7 +8,7 @@ import { IWhatsAppProvider } from '@infrastructure/services/whatsapp/IWhatsAppPr
 import { RateLimiter } from '@shared/utils/RateLimiter';
 import { AppError } from '@shared/errors/AppError';
 import { SendTextInput, SendTextOutput } from '../dtos/SendTextDTO';
-import { assertSendable, normalizePhone, persistWamid, isNotOnWhatsApp } from './SendTemplateUseCase';
+import { assertSendable, normalizePhone, persistWamid, isNotOnWhatsApp, handleSendFailure, serializeTextPayload } from './SendTemplateUseCase';
 
 export class SendTextUseCase {
   private readonly limiter = new RateLimiter(1_000);
@@ -44,7 +44,7 @@ export class SendTextUseCase {
       const { message, created } = await this.messageRepo.createPending({
         contactId:       contact.id,
         channel:         'whatsapp',
-        body:            input.body,
+        body:            serializeTextPayload(input.body),
         clientMessageId: input.clientMessageId,
       });
       if (!created) {
@@ -61,9 +61,7 @@ export class SendTextUseCase {
       wamid = result.wamid;
     } catch (err) {
       if (messageId) {
-        await this.messageRepo.updateStatusById(messageId, 'failed',
-          err instanceof Error ? err.message : String(err),
-        ).catch(() => {});
+        await handleSendFailure(this.messageRepo, messageId, 0, err);
       }
       if (contact && isNotOnWhatsApp(err)) {
         await this.contactRepo.setWhatsappByLeadId(contact.leadId, false).catch(() => {});
@@ -76,7 +74,7 @@ export class SendTextUseCase {
       await persistWamid(this.messageRepo, messageId, wamid, openConvId);
     }
 
-    // Track send (fire-and-forget — never fail the send over a tracking update)
+    // Track send (never fail the send over a tracking update)
     if (contact) {
       this.contactRepo.trackOutboundSent(contact.id).catch(() => {});
     }

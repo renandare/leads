@@ -19,5 +19,14 @@ export interface IMessageRepository {
   // Updates message status by its own ID (used when wamid not yet assigned)
   updateStatusById(id: string, status: string, errorReason?: string | null): Promise<void>;
 
+  // Finds a message by its ID
   findById(id: string): Promise<Message | null>;
+
+  // Increments retryCount and sets retryAfter for the next retry attempt
+  // Clears lockedAt so the worker can pick it up again
+  scheduleRetry(id: string, retryAfter: Date): Promise<void>;
+
+  // Claims up to `limit` retryable messages (status=pending, retryAfter<=now, lockedAt=null)
+  // using FOR UPDATE SKIP LOCKED and sets lockedAt=now().
+  claimRetryable(limit: number): Promise<Message[]>;
 }

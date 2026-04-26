@@ -120,6 +120,8 @@ beforeEach(() => {
     updateWamid:             jest.fn(),
     updateStatusByWamid:     jest.fn(),
     updateStatusById:        jest.fn(),
+    scheduleRetry:           jest.fn(),
+    claimRetryable:          jest.fn(),
     linkConversationByWamid: jest.fn(),
     findById:                jest.fn(),
   } as jest.Mocked<IMessageRepository>;

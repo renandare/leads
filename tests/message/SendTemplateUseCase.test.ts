@@ -78,6 +78,8 @@ beforeEach(() => {
     linkConversationByWamid: jest.fn().mockResolvedValue(undefined),
     updateStatusById:        jest.fn().mockResolvedValue(undefined),
     findById:                jest.fn(),
+    scheduleRetry:           jest.fn().mockResolvedValue(undefined),
+    claimRetryable:          jest.fn().mockResolvedValue([]),
   } as jest.Mocked<IMessageRepository>;
 
   conversationRepo = {
@@ -270,12 +272,20 @@ describe('frequency cap', () => {
 // Error handling
 
 describe('error handling', () => {
-  it('marks message as failed and re-throws on Meta API error', async () => {
+  it('schedules retry (not failed) on transient Meta API error', async () => {
     whatsApp.sendTemplate.mockRejectedValue(new Error('Meta API error 190: token expired'));
     await expect(useCase.execute(makeInput())).rejects.toThrow('token expired');
+    expect(messageRepo.scheduleRetry).toHaveBeenCalledWith(MSG_ID, expect.any(Date));
+    expect(messageRepo.updateStatusById).not.toHaveBeenCalledWith(MSG_ID, 'failed', expect.anything());
+  });
+
+  it('marks message as failed (no retry) when Meta returns error 131026', async () => {
+    whatsApp.sendTemplate.mockRejectedValue(new Error('Meta API error 131026: number not on WhatsApp'));
+    await expect(useCase.execute(makeInput())).rejects.toThrow();
     expect(messageRepo.updateStatusById).toHaveBeenCalledWith(
-      MSG_ID, 'failed', expect.stringContaining('token expired'),
+      MSG_ID, 'failed', expect.stringContaining('131026'),
     );
+    expect(messageRepo.scheduleRetry).not.toHaveBeenCalled();
   });
 
   it('marks contact whatsapp=false when Meta returns error 131026', async () => {
@@ -290,10 +300,11 @@ describe('error handling', () => {
     expect(contactRepo.setWhatsappByLeadId).not.toHaveBeenCalled();
   });
 
-  it('does NOT mark as failed when there is no message record (direct send)', async () => {
+  it('does NOT schedule retry when there is no message record (direct send)', async () => {
     contactRepo.findByPhone.mockResolvedValue(null);
     whatsApp.sendTemplate.mockRejectedValue(new Error('Meta API error'));
     await expect(useCase.execute(makeInput())).rejects.toThrow();
+    expect(messageRepo.scheduleRetry).not.toHaveBeenCalled();
     expect(messageRepo.updateStatusById).not.toHaveBeenCalled();
   });
 
