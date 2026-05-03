@@ -129,10 +129,12 @@ describe('sendText', () => {
 // ─── sendTemplate ────────────────────────────────────────────────────────────
 
 describe('sendTemplate', () => {
-  it('builds the correct payload with parameters', async () => {
+  it('builds the correct payload with body parameters', async () => {
     mockFetch({ messaging_product: 'whatsapp', messages: [{ id: WAMID }] });
 
-    await provider.sendTemplate('5514996168848', 'promo_offer', 'pt_BR', ['João', 'R$50,00']);
+    await provider.sendTemplate('5514996168848', 'promo_offer', 'pt_BR', {
+      body: { customer_name: 'João', discount: 'R$50,00' },
+    });
 
     const body = captureLastFetchBody() as Record<string, unknown>;
     const tmpl = body.template as Record<string, unknown>;
@@ -146,14 +148,45 @@ describe('sendTemplate', () => {
 
     const params = components[0]!.parameters as Array<Record<string, unknown>>;
     expect(params).toHaveLength(2);
-    expect(params[0]).toEqual({ type: 'text', text: 'João' });
-    expect(params[1]).toEqual({ type: 'text', text: 'R$50,00' });
+    expect(params[0]).toEqual({ type: 'text', parameter_name: 'customer_name', text: 'João' });
+    expect(params[1]).toEqual({ type: 'text', parameter_name: 'discount', text: 'R$50,00' });
+  });
+
+  it('builds the correct payload with header parameters', async () => {
+    mockFetch({ messaging_product: 'whatsapp', messages: [{ id: WAMID }] });
+
+    await provider.sendTemplate('5514996168848', 'outreach_loja', 'pt_BR', {
+      header: { customer_name: 'Renan' },
+    });
+
+    const body = captureLastFetchBody() as Record<string, unknown>;
+    const components = (body.template as Record<string, unknown>).components as Array<Record<string, unknown>>;
+    expect(components).toHaveLength(1);
+    expect(components[0]!.type).toBe('header');
+
+    const params = components[0]!.parameters as Array<Record<string, unknown>>;
+    expect(params[0]).toEqual({ type: 'text', parameter_name: 'customer_name', text: 'Renan' });
+  });
+
+  it('builds both header and body components when both present', async () => {
+    mockFetch({ messaging_product: 'whatsapp', messages: [{ id: WAMID }] });
+
+    await provider.sendTemplate('5514996168848', 'mixed', 'pt_BR', {
+      header: { title: 'Hello' },
+      body:   { name: 'World' },
+    });
+
+    const body = captureLastFetchBody() as Record<string, unknown>;
+    const components = (body.template as Record<string, unknown>).components as Array<Record<string, unknown>>;
+    expect(components).toHaveLength(2);
+    expect(components[0]!.type).toBe('header');
+    expect(components[1]!.type).toBe('body');
   });
 
   it('sends empty components array when no params', async () => {
     mockFetch({ messaging_product: 'whatsapp', messages: [{ id: WAMID }] });
 
-    await provider.sendTemplate('5514996168848', 'welcome', 'pt_BR', []);
+    await provider.sendTemplate('5514996168848', 'welcome', 'pt_BR', {});
 
     const body = captureLastFetchBody() as Record<string, unknown>;
     const tmpl = body.template as Record<string, unknown>;
@@ -163,7 +196,7 @@ describe('sendTemplate', () => {
   it('returns wamid on success', async () => {
     mockFetch({ messaging_product: 'whatsapp', messages: [{ id: WAMID }] });
 
-    const result = await provider.sendTemplate('5514996168848', 'w', 'pt_BR', []);
+    const result = await provider.sendTemplate('5514996168848', 'w', 'pt_BR', {});
     expect(result.wamid).toBe(WAMID);
   });
 
@@ -173,7 +206,7 @@ describe('sendTemplate', () => {
       400,
     );
 
-    await expect(provider.sendTemplate('5514', 'missing_tmpl', 'pt_BR', [])).rejects.toThrow(
+    await expect(provider.sendTemplate('5514', 'missing_tmpl', 'pt_BR', {})).rejects.toThrow(
       'Meta API error 132000: Template not found',
     );
   });

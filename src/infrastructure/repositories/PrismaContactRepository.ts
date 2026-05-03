@@ -3,6 +3,7 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { IContactRepository } from "@domain/contact/repositories/IContactRepository";
 import { Contact } from "@domain/contact/entities/Contact";
+import { CampaignContact } from "@domain/campaign/entities/CampaignContact";
 
 export class PrismaContactRepository implements IContactRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -150,5 +151,60 @@ export class PrismaContactRepository implements IContactRepository {
         status:          'unsubscribed',
       },
     });
+  }
+
+  async findCampaignBatch(
+    campaignId: string,
+    segment: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<CampaignContact[]> {
+
+    const segmentClause =
+      segment === 'new'              ? Prisma.sql`AND c.stage = 'new'` :
+      segment === 'cold'             ? Prisma.sql`AND c.stage = 'cold'` :
+      segment === 'reactivation'     ? Prisma.sql`AND c.last_purchase_at IS NOT NULL` :
+      segment === 'engaged'          ? Prisma.sql`AND c.stage IN ('engaged', 'hot_lead', 'negotiation', 'replied')` :
+      segment === 'core_eletrica'    ? Prisma.sql`AND l.type = 'core_eletrica'` :
+      segment === 'core_engenharia'  ? Prisma.sql`AND l.type = 'core_engenharia'` :
+      segment === 'core_construcao'  ? Prisma.sql`AND l.type = 'core_construcao'` :
+      segment === 'parceria_obra'    ? Prisma.sql`AND l.type = 'parceria_obra'` :
+      segment === 'condominio'       ? Prisma.sql`AND l.type = 'condominio'` :
+      Prisma.sql``; // 'all' — no extra filter
+
+    const cursorClause = cursor
+      ? Prisma.sql`AND c.id > ${cursor}::uuid`
+      : Prisma.sql``;
+
+    return this.prisma.$queryRaw<CampaignContact[]>(Prisma.sql`
+      SELECT
+        c.id,
+        c.phone,
+        c.lead_id                AS "leadId",
+        c.last_purchase_at       AS "lastPurchaseAt",
+        c.contact_count_30d      AS "contactCount30d",
+        c.last_contact_at        AS "lastContactAt",
+        c.whatsapp,
+        c.status,
+        c.unsubscribed,
+        COALESCE(l.trade_name, l.name) AS "customerName"
+      FROM contacts c
+      JOIN leads l ON l.id = c.lead_id
+      WHERE c.status       = 'active'
+        AND c.unsubscribed  = false
+        AND (c.whatsapp IS NULL OR c.whatsapp = true)
+        AND c.phone        IS NOT NULL
+        AND c.deleted_at   IS NULL
+        ${segmentClause}
+        AND NOT EXISTS (
+          SELECT 1 FROM messages m
+          WHERE m.campaign_id = ${campaignId}::uuid
+            AND m.contact_id  = c.id
+            AND m.status     != 'failed'
+        )
+        ${cursorClause}
+      ORDER BY c.id
+      LIMIT ${limit}
+    `);
   }
 }

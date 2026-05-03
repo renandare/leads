@@ -3,10 +3,11 @@
 import { Router, Request, Response } from 'express';
 
 import { prisma } from '@infrastructure/database/prisma/client';
-import leadRoutes    from './lead.routes';
-import jobRoutes     from './job.routes';
-import webhookRoutes from './webhook.routes';
-import messageRoutes from './message.routes';
+import leadRoutes     from './lead.routes';
+import jobRoutes      from './job.routes';
+import webhookRoutes  from './webhook.routes';
+import messageRoutes  from './message.routes';
+import campaignRoutes from './campaign.routes';
 
 const router = Router();
 
@@ -41,9 +42,10 @@ router.get('/health/dead-letter', async (_req: Request, res: Response) => {
   });
 });
 
-router.use('/leads',    leadRoutes);
-router.use('/jobs',     jobRoutes);
-router.use('/webhook',  webhookRoutes);
-router.use('/messages', messageRoutes);
+router.use('/leads',     leadRoutes);
+router.use('/jobs',      jobRoutes);
+router.use('/webhook',   webhookRoutes);
+router.use('/messages',  messageRoutes);
+router.use('/campaigns', campaignRoutes);
 
 export default router;

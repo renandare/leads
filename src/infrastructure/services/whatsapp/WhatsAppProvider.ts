@@ -1,7 +1,7 @@
 // src/infrastructure/services/whatsapp/WhatsAppProvider.ts
 // Meta Cloud API — WhatsApp Business
 
-import { IWhatsAppProvider, SendResult } from './IWhatsAppProvider';
+import { IWhatsAppProvider, SendResult, TemplateParams } from './IWhatsAppProvider';
 
 // Meta API responses
 
@@ -66,14 +66,26 @@ export class WhatsAppProvider implements IWhatsAppProvider {
     return this.sendMessage(payload);
   }
 
-  // sendTemplate
   async sendTemplate(
     to:           string,
     templateName: string,
     languageCode: string,
-    params:       string[],
+    params:       TemplateParams,
   ): Promise<SendResult> {
-    const bodyParameters = params.map(p => ({ type: 'text', text: p }));
+    const toComponent = (type: 'header' | 'body', vars: Record<string, string>) => ({
+      type,
+      parameters: Object.entries(vars).map(([name, value]) => ({
+        type: 'text', parameter_name: name, text: value,
+      })),
+    });
+
+    const components = (
+      [['header', params.header], ['body', params.body]] as const
+    ).flatMap(([type, vars]) => {
+      if (!vars) return [];
+      const entries = Object.entries(vars);
+      return entries.length > 0 ? [toComponent(type, vars)] : [];
+    });
 
     const payload = {
       messaging_product: 'whatsapp',
@@ -83,9 +95,7 @@ export class WhatsAppProvider implements IWhatsAppProvider {
       template: {
         name:     templateName,
         language: { code: languageCode },
-        components: params.length
-          ? [{ type: 'body', parameters: bodyParameters }]
-          : [],
+        components,
       },
     };
 

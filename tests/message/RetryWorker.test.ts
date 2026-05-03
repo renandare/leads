@@ -31,7 +31,7 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
   return {
     id: MSG_ID, contactId: CONTACT_ID, campaignId: null, templateId: null,
     channel: 'whatsapp', status: 'pending', wamid: null, clientMessageId: 'client-1',
-    body: serializeTemplatePayload('outreach_loja', 'pt_BR', ['João']),
+    body: serializeTemplatePayload('outreach_loja', 'pt_BR', { header: { customer_name: 'João' } }),
     conversationId: null, retryCount: 1, retryAfter: new Date(Date.now() - 1000),
     lockedAt: new Date(), sentAt: null, errorReason: null, deletedAt: null,
     createdAt: new Date(),
@@ -66,6 +66,7 @@ beforeEach(() => {
     touchLastReplyAt:    jest.fn(),
     trackOutboundSent:   jest.fn().mockResolvedValue(undefined),
     unsubscribeById:     jest.fn(),
+    findCampaignBatch:   jest.fn(),
   } as jest.Mocked<IContactRepository>;
 
   whatsApp = {
@@ -94,7 +95,7 @@ describe('tick() — empty queue', () => {
 describe('template retry — success', () => {
   it('sends template with params from serialized body', async () => {
     await worker.tick();
-    expect(whatsApp.sendTemplate).toHaveBeenCalledWith(PHONE, 'outreach_loja', 'pt_BR', ['João']);
+    expect(whatsApp.sendTemplate).toHaveBeenCalledWith(PHONE, 'outreach_loja', 'pt_BR', { header: { customer_name: 'João' } });
   });
 
   it('calls updateWamid after successful send', async () => {
@@ -234,9 +235,9 @@ describe('edge cases', () => {
 
 describe('serializeTemplatePayload / serializeTextPayload round-trip', () => {
   it('serializes and deserializes template payload', () => {
-    const serialized = serializeTemplatePayload('outreach_loja', 'pt_BR', ['João']);
+    const serialized = serializeTemplatePayload('outreach_loja', 'pt_BR', { header: { customer_name: 'João' } });
     const parsed = JSON.parse(serialized);
-    expect(parsed).toEqual({ type: 'template', templateName: 'outreach_loja', languageCode: 'pt_BR', params: ['João'] });
+    expect(parsed).toEqual({ type: 'template', templateName: 'outreach_loja', languageCode: 'pt_BR', params: { header: { customer_name: 'João' } } });
   });
 
   it('serializes and deserializes text payload', () => {

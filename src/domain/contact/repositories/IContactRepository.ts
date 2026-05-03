@@ -1,6 +1,7 @@
 // src/domain/contact/repositories/IContactRepository.ts
 
 import { Contact } from '@domain/contact/entities/Contact';
+import { CampaignContact } from '@domain/campaign/entities/CampaignContact';
 
 export interface IContactRepository {
   // Creates or updates the single contact for a lead.
@@ -29,4 +30,12 @@ export interface IContactRepository {
 
   // Sets unsubscribed = true, unsubscribedAt = now(), status = 'unsubscribed'.
   unsubscribeById(id: string): Promise<void>;
+
+  // Returns sendable contacts for campaign, excluding contacts already messaged in this campaign.
+  findCampaignBatch(
+    campaignId: string,
+    segment: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<CampaignContact[]>;
 }

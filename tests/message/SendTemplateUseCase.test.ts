@@ -40,13 +40,13 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
 }
 
 function makeInput(overrides: Partial<{
-  to: string; templateName: string; languageCode: string; params: string[]; clientMessageId: string;
+  to: string; templateName: string; languageCode: string; params: { header?: Record<string,string>; body?: Record<string,string> }; clientMessageId: string;
 }> = {}) {
   return {
     to:              PHONE,
     templateName:    'promo_offer',
     languageCode:    'pt_BR',
-    params:          ['João', 'R$50'],
+    params:          { body: { customer_name: 'João', discount: 'R$50' } },
     clientMessageId: CLIENT_ID,
     ...overrides,
   };
@@ -69,6 +69,7 @@ beforeEach(() => {
     touchLastReplyAt:    jest.fn(),
     trackOutboundSent:   jest.fn().mockResolvedValue(undefined),
     unsubscribeById:     jest.fn(),
+    findCampaignBatch:   jest.fn(),
   } as jest.Mocked<IContactRepository>;
 
   messageRepo = {
@@ -116,13 +117,13 @@ describe('success — contact in CRM', () => {
   it('calls sendTemplate with normalized phone (+ prefix)', async () => {
     await useCase.execute(makeInput({ to: '5514996168848' })); // no leading +
     expect(whatsApp.sendTemplate).toHaveBeenCalledWith(
-      '+5514996168848', 'promo_offer', 'pt_BR', ['João', 'R$50'],
+      '+5514996168848', 'promo_offer', 'pt_BR', { body: { customer_name: 'João', discount: 'R$50' } },
     );
   });
 
   it('keeps + when already present', async () => {
     await useCase.execute(makeInput({ to: '+5514996168848' }));
-    expect(whatsApp.sendTemplate).toHaveBeenCalledWith('+5514996168848', expect.any(String), expect.any(String), expect.any(Array));
+    expect(whatsApp.sendTemplate).toHaveBeenCalledWith('+5514996168848', expect.any(String), expect.any(String), expect.any(Object));
   });
 
   it('inserts pending message BEFORE the API call', async () => {

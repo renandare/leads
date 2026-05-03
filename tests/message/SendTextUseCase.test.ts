@@ -76,6 +76,7 @@ beforeEach(() => {
     touchLastReplyAt:    jest.fn(),
     trackOutboundSent:   jest.fn().mockResolvedValue(undefined),
     unsubscribeById:     jest.fn(),
+    findCampaignBatch:   jest.fn(),
   } as jest.Mocked<IContactRepository>;
 
   messageRepo = {

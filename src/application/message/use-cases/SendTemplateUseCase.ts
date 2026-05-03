@@ -4,7 +4,7 @@
 import { IContactRepository } from '@domain/contact/repositories/IContactRepository';
 import { IMessageRepository } from '@domain/message/repositories/IMessageRepository';
 import { IConversationRepository } from '@domain/conversation/repositories/IConversationRepository';
-import { IWhatsAppProvider } from '@infrastructure/services/whatsapp/IWhatsAppProvider';
+import { IWhatsAppProvider, TemplateParams } from '@infrastructure/services/whatsapp/IWhatsAppProvider';
 import { Contact } from '@domain/contact/entities/Contact';
 import { RateLimiter } from '@shared/utils/RateLimiter';
 import { logger } from '@shared/utils/logger';
@@ -158,7 +158,7 @@ export async function handleSendFailure(
 export function serializeTemplatePayload(
   templateName: string,
   languageCode:  string,
-  params:        string[],
+  params:        TemplateParams,
 ): string {
   return JSON.stringify({ type: 'template', templateName, languageCode, params });
 }
@@ -170,7 +170,7 @@ export function serializeTextPayload(body: string): string {
 
 // Types and parsers for the serialized message body used for retries
 export type MessagePayload =
-  | { type: 'template'; templateName: string; languageCode: string; params: string[] }
+  | { type: 'template'; templateName: string; languageCode: string; params: TemplateParams }
   | { type: 'text'; body: string };
 
 // Parses the serialized body. Returns null if body is missing or malformed.
@@ -178,7 +178,8 @@ export function parseMessagePayload(raw: string | null): MessagePayload | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    if (parsed.type === 'template' && parsed.templateName) return parsed as MessagePayload;
+    if (parsed.type === 'template' && parsed.templateName && typeof parsed.params === 'object' && !Array.isArray(parsed.params))
+      return parsed as MessagePayload;
     if (parsed.type === 'text' && typeof parsed.body === 'string') return parsed as MessagePayload;
     return null;
   } catch {
